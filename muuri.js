@@ -3000,6 +3000,7 @@
     drag._hammer = hammer = new Hammer.Manager(element);
     drag._isDestroyed = false;
     drag._isMigrating = false;
+    drag._placeholder = null;
     drag._data = {};
 
     // Create a private drag start resolver that can be used to resolve the drag
@@ -3676,7 +3677,7 @@
   };
 
   /**
-   * cancel move/scroll event raf loop action.
+   * Cancel move/scroll event raf loop action.
    *
    * @public
    * @memberof ItemDrag.prototype
@@ -3739,6 +3740,63 @@
 
     // Reset drag data.
     drag.reset();
+
+    return drag;
+
+  };
+
+  /**
+   * Create placeholder element.
+   *
+   * @public
+   * @memberof ItemDrag.prototype
+   * @returns {ItemDrag}
+   */
+  ItemDrag.prototype.createPlaceholder = function () {
+
+    var drag = this;
+    var item = drag.getItem();
+    var grid = drag.getGrid();
+    var placeholder = drag._placeholder = grid._settings.dragPlaceholder(item);
+
+    // Add placeholder class to the placeholder element.
+    addClass(placeholder, grid._settings.itemDragPlaceholderClass);
+
+    // Position the placeholder item correctly.
+    setStyles(placeholder, {
+      display: 'block',
+      left: '0',
+      top: '0',
+      transform: getTranslateString(item._left, item._top)
+    });
+
+    // Append the placeholder element to the grid container.
+    grid.getElement().appendChild(placeholder);
+
+    // TODO: Start listening to any events which can cause item to change it's
+    // left and top values, and react to them. Also... make placeholder it's own
+    // instance, because it needs some state.
+
+    return drag;
+
+  };
+
+  /**
+   * Destroy placeholder element.
+   *
+   * @public
+   * @memberof ItemDrag.prototype
+   * @returns {ItemDrag}
+   */
+  ItemDrag.prototype.destroyPlaceholder = function () {
+
+    var drag = this;
+    var placeholder = drag._placeholder;
+
+    if (placeholder) {
+      placeholder.parentNode.removeChild(placeholder);
+      drag._placeholder = null;
+    }
 
     return drag;
 
