@@ -3746,63 +3746,6 @@
   };
 
   /**
-   * Create placeholder element.
-   *
-   * @public
-   * @memberof ItemDrag.prototype
-   * @returns {ItemDrag}
-   */
-  ItemDrag.prototype.createPlaceholder = function () {
-
-    var drag = this;
-    var item = drag.getItem();
-    var grid = drag.getGrid();
-    var placeholder = drag._placeholder = grid._settings.dragPlaceholder(item);
-
-    // Add placeholder class to the placeholder element.
-    addClass(placeholder, grid._settings.itemDragPlaceholderClass);
-
-    // Position the placeholder item correctly.
-    setStyles(placeholder, {
-      display: 'block',
-      left: '0',
-      top: '0',
-      transform: getTranslateString(item._left, item._top)
-    });
-
-    // Append the placeholder element to the grid container.
-    grid.getElement().appendChild(placeholder);
-
-    // TODO: Start listening to any events which can cause item to change it's
-    // left and top values, and react to them. Also... make placeholder it's own
-    // instance, because it needs some state.
-
-    return drag;
-
-  };
-
-  /**
-   * Destroy placeholder element.
-   *
-   * @public
-   * @memberof ItemDrag.prototype
-   * @returns {ItemDrag}
-   */
-  ItemDrag.prototype.destroyPlaceholder = function () {
-
-    var drag = this;
-    var placeholder = drag._placeholder;
-
-    if (placeholder) {
-      placeholder.parentNode.removeChild(placeholder);
-      drag._placeholder = null;
-    }
-
-    return drag;
-
-  };
-
-  /**
    * Drag start handler.
    *
    * @public
@@ -4079,6 +4022,119 @@
     drag._isMigrating ? drag.finishMigration() : release.start();
 
     return drag;
+
+  };
+
+  /**
+   * ItemDragPlaceholder
+   * *******************
+   */
+
+  function ItemDragPlaceholder(item) {
+
+    var inst = this;
+    var grid = item.getGrid();
+    var element = grid._settings.dragPlaceholder(item);
+
+    inst._grid = inst._nextGrid = grid;
+    inst._item = item;
+    inst._element = element;
+    inst._left = item._left;
+    inst._top = item._top;
+
+    inst._onLayout = function () {
+      inst.layout();
+    };
+
+    inst._onMigrate = function (data) {
+      if (data.item === item) {
+        // Unbind previous listeners.
+        grid.off(evLayoutStart, inst._onLayout);
+        grid.off(evBeforeSend, inst._onMigrate);
+        // Update grid reference.
+        inst._nextGrid = grid = data.toGrid;
+        // Bind new listeners.
+        grid.on(evLayoutStart, inst._onLayout);
+        grid.on(evBeforeSend, inst._onMigrate);
+      }
+    };
+
+    // Add placeholder class to the placeholder element.
+    addClass(element, grid._settings.itemDragPlaceholderClass);
+
+    // Position the placeholder item correctly.
+    setStyles(element, {
+      display: 'block',
+      left: '0',
+      top: '0',
+      transform: getTranslateString(inst._left, inst._top)
+    });
+
+    // Append the placeholder element to the grid container.
+    grid.getElement().appendChild(element);
+
+    // Bind initial event listeners.
+    grid.on(evLayoutStart, inst._onLayout);
+    grid.on(evBeforeSend, inst._onMigrate);
+
+  }
+
+  /**
+   * Move placeholder to the new position.
+   *
+   * @public
+   * @memberof ItemDragPlaceholder.prototype
+   * @param {Object} position
+   * @returns {ItemDragPlaceholder}
+   */
+  ItemDragPlaceholder.prototype.layout = function () {
+
+    var inst = this;
+    var grid = inst._grid;
+    var itemId = inst._item._id;
+    var nextGrid = inst._nextGrid;
+    var nextPosition = nextGrid._layout.slots[itemId];
+    var left = inst._left;
+    var top = inst._top;
+    var nextLeft = nextPosition.left;
+    var nextTop = nextPosition.top;
+    var doMigrate = nextGrid !== grid;
+    var doLayout = left !== nextLeft || top !== nextTop;
+
+    // TODO: Animate item to new position.
+    inst._grid = nextGrid;
+    inst._left = nextLeft;
+    inst._top = nextTop;
+
+    return inst;
+
+  };
+
+  /**
+   * Destroy placeholder instance.
+   *
+   * @public
+   * @memberof ItemDragPlaceholder.prototype
+   * @returns {ItemDragPlaceholder}
+   */
+  ItemDragPlaceholder.prototype.destroy = function () {
+
+    var inst = this;
+
+    // Unbind events.
+    inst._grid.off(evLayoutStart, inst._onLayout);
+    inst._grid.off(evBeforeSend, inst._onMigrate);
+    inst._nextGrid.off(evLayoutStart, inst._onLayout);
+    inst._nextGrid.off(evBeforeSend, inst._onMigrate);
+
+    // Remove DOM node.
+    inst._element.parentNode.removeChild(inst._element);
+
+    // Reset data.
+    inst._grid = inst._item = inst._element = inst._onLayout = inst._onMigrate = null;
+    inst._left = inst._top = 0;
+
+    return inst;
 
   };
 
