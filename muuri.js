@@ -1401,8 +1401,8 @@
     inst._child = element.children[0];
 
     // Initiate item's animation controllers.
-    inst._animate = new Grid.ItemAnimate(inst, element);
-    inst._animateChild = new Grid.ItemAnimate(inst, inst._child);
+    inst._animate = new Grid.ItemAnimate(element);
+    inst._animateChild = new Grid.ItemAnimate(inst._child);
 
     // Set up active state (defines if the item is considered part of the layout
     // or not).
@@ -2343,13 +2343,11 @@
    *
    * @public
    * @class
-   * @param {Item} item
    * @param {HTMLElement} element
    */
-  function ItemAnimate(item, element) {
+  function ItemAnimate(element) {
 
     var inst = this;
-    inst._item = item;
     inst._element = element;
     inst._animation = null;
     inst._propsTo = null;
@@ -2473,7 +2471,7 @@
 
     if (!inst._isDestroyed) {
       inst.stop();
-      inst._item = inst._element = null;
+      inst._element = null;
       inst._isDestroyed = true;
     }
 
@@ -2998,9 +2996,9 @@
     drag._itemId = item._id;
     drag._gridId = grid._id;
     drag._hammer = hammer = new Hammer.Manager(element);
+    drag._placeholder = new ItemDragPlaceholder(item);
     drag._isDestroyed = false;
     drag._isMigrating = false;
-    drag._placeholder = null;
     drag._data = {};
 
     // Create a private drag start resolver that can be used to resolve the drag
@@ -4036,11 +4034,13 @@
     var grid = item.getGrid();
     var element = grid._settings.dragPlaceholder(item);
 
+    inst._id = ++uuid;
     inst._grid = inst._nextGrid = grid;
     inst._item = item;
     inst._element = element;
     inst._left = item._left;
     inst._top = item._top;
+    inst._animate = new Grid.ItemAnimate(element);
 
     inst._onLayout = function () {
       inst.layout();
@@ -4091,20 +4091,46 @@
 
     var inst = this;
     var grid = inst._grid;
-    var itemId = inst._item._id;
+    var element = inst._element;
     var nextGrid = inst._nextGrid;
-    var nextPosition = nextGrid._layout.slots[itemId];
-    var left = inst._left;
-    var top = inst._top;
+    var nextPosition = nextGrid._layout.slots[inst._item._id];
     var nextLeft = nextPosition.left;
     var nextTop = nextPosition.top;
+    var animDuration = grid._settings.layoutDuration;
+    var animEasing = grid._settings.layoutEasing;
+    var animEnabled = animDuration > 0;
+    var doLayout = inst._left !== nextLeft || inst._top !== nextTop;
     var doMigrate = nextGrid !== grid;
-    var doLayout = left !== nextLeft || top !== nextTop;
+    var currentLeft;
+    var currentTop;
 
-    // TODO: Animate item to new position.
+    // Update data.
     inst._grid = nextGrid;
     inst._left = nextLeft;
     inst._top = nextTop;
+
+    // Layout if necessary.
+    if (doLayout) {
+      // Just set new position if no animation is required.
+      if (!animEnabled) {
+        setStyles(element, {transform: getTranslateString(nextLeft, nextTop)})
+      }
+      // Animate if necessary.
+      else {
+        rafLoop.add(rafQueueLayout, inst._id, function () {
+          currentLeft = getTranslateAsFloat(element, 'x');
+          currentTop = getTranslateAsFloat(element, 'y');
+        }, function () {
+          if (currentLeft !== nextLeft || currentTop !== nextTop) {
+            inst._animate.start(
+              {transform: getTranslateString(currentLeft, currentTop)},
+              {transform: getTranslateString(nextLeft, nextTop)},
+              {duration: animDuration, easing: animEasing}
+            );
+          }
+        });
+      }
+    }
 
     return inst;
 
@@ -4127,11 +4153,17 @@
     inst._nextGrid.off(evLayoutStart, inst._onLayout);
     inst._nextGrid.off(evBeforeSend, inst._onMigrate);
 
+    // Cancel potential rafLoop entry.
+    rafLoop.cancel(rafQueueLayout, inst._id);
+
+    // Destroy animation.
+    inst._animate.destroy();
+
     // Remove DOM node.
     inst._element.parentNode.removeChild(inst._element);
 
     // Reset data.
-    inst._grid = inst._item = inst._element = inst._onLayout = inst._onMigrate = null;
+    inst._grid = inst._item = inst._element = inst._onLayout = inst._onMigrate = inst._animate = null;
     inst._left = inst._top = 0;
 
     return inst;
