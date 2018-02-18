@@ -25,24 +25,18 @@
 (function (global, factory) {
 
   var namespace = 'Muuri';
-  var Hammer;
 
   if (typeof module === 'object' && module.exports) {
-    /* eslint-disable */
-    try { Hammer = require('hammerjs'); } catch (e) {}
-    /* eslint-enable */
-    module.exports = factory(namespace, Hammer);
+    module.exports = factory(namespace);
   }
   else if (typeof define === 'function' && define.amd) {
-    define(['hammerjs'], function (Hammer) {
-      return factory(namespace, Hammer);
-    });
+    define(factory(namespace));
   }
   else {
-    global[namespace] = factory(namespace, global.Hammer);
+    global[namespace] = factory(namespace);
   }
 
-}(typeof window !== 'undefined' ? window : this, function (namespace, Hammer, undefined) {
+}(typeof window !== 'undefined' ? window : this, function (namespace, undefined) {
 
   'use strict';
 
@@ -170,7 +164,6 @@
    * @param {String} [options.dragSortPredicate.action="move"]
    * @param {Number} [options.dragReleaseDuration=300]
    * @param {String} [options.dragReleaseEasing="ease"]
-   * @param {Object} [options.dragHammerSettings={touchAction: "none"}]
    * @param {String} [options.containerClass="muuri"]
    * @param {String} [options.itemClass="muuri-item"]
    * @param {String} [options.itemVisibleClass="muuri-item-visible"]
@@ -306,6 +299,11 @@
   Grid.Emitter = Emitter;
 
   /**
+   * @see Dragger
+   */
+  Grid.Dragger = Dragger;
+
+  /**
    * Default options for Grid instance.
    *
    * @public
@@ -367,9 +365,6 @@
     },
     dragReleaseDuration: 300,
     dragReleaseEasing: 'ease',
-    dragHammerSettings: {
-      touchAction: 'none'
-    },
 
     // Classnames
     containerClass: 'muuri',
@@ -2978,15 +2973,11 @@
    */
   function ItemDrag(item) {
 
-    if (!Hammer) {
-      throw new Error('[' + namespace + '] required dependency Hammer is not defined.');
-    }
-
     var drag = this;
     var element = item._element;
     var grid = item.getGrid();
     var settings = grid._settings;
-    var hammer;
+    var dragger;
 
     // Start predicate.
     var startPredicate = typeof settings.dragStartPredicate === typeFunction ?
@@ -2997,7 +2988,7 @@
     // Protected data.
     drag._itemId = item._id;
     drag._gridId = grid._id;
-    drag._hammer = hammer = new Hammer.Manager(element);
+    drag._dragger = dragger = new Dragger(element);
     drag._isDestroyed = false;
     drag._isMigrating = false;
     drag._data = {};
@@ -3028,30 +3019,8 @@
     // Setup item's initial drag data.
     drag.reset();
 
-    // Add drag recognizer to hammer.
-    hammer.add(new Hammer.Pan({
-      event: 'drag',
-      pointers: 1,
-      threshold: 0,
-      direction: Hammer.DIRECTION_ALL
-    }));
-
-    // Add draginit recognizer to hammer.
-    hammer.add(new Hammer.Press({
-      event: 'draginit',
-      pointers: 1,
-      threshold: 1000,
-      time: 0
-    }));
-
-    // Configure the hammer instance.
-    if (isPlainObject(settings.dragHammerSettings)) {
-      hammer.set(settings.dragHammerSettings);
-    }
-
     // Bind drag events.
-    hammer
-    .on('draginit dragstart dragmove', function (e) {
+    dragger.on('draginit dragstart dragmove', function (e) {
 
       // Let's activate drag start predicate state.
       if (startPredicateState === startPredicateInactive) {
@@ -3323,7 +3292,7 @@
 
     if (!drag._isDestroyed) {
       drag.stop();
-      drag._hammer.destroy();
+      drag._dragger.destroy();
       drag.getItem()._element.removeEventListener('dragstart', preventDefault, false);
       drag._isDestroyed = true;
     }
@@ -4021,6 +3990,278 @@
     drag._isMigrating ? drag.finishMigration() : release.start();
 
     return drag;
+
+  };
+
+  /**
+   * Dragger
+   * *******
+   */
+
+  /**
+   * Creates a new Dragger instance for an element.
+   *
+   * @public
+   * @class
+   * @param {HTMLElement} element
+   */
+  function Dragger(element) {
+
+    var events = Dragger._events;
+    var inst = this;
+
+    inst._element = element;
+    inst._emitter = new Emitter();
+
+    // Drag data.
+    inst._isDragging = false;
+    inst._startEvent = null;
+    inst._pointerId = 0;
+
+    inst._onStart = function (e) {
+      if (!inst._isDragging) {
+        var pointerId = Dragger._getEventPointerId(e);
+        if (pointerId) {
+          inst._isDragging = true;
+          inst._pointerId = pointerId;
+          inst._startEvent = e;
+          element.addEventListener(events.move, inst._onMove);
+          events.cancel && element.addEventListener(events.cancel, inst._onCancel);
+          element.addEventListener(events.end, inst._onEnd);
+          inst._emitter.emit('start', e);
+        }
+      }
+    };
+
+    inst._onMove = function (e) {
+      if (Dragger._isPointerInEvent(e, inst._pointerId)) {
+        inst._emitter.emit('move', e);
+      }
+    };
+
+    inst._onCancel = function (e) {
+      if (inst._isDragging) {
+        inst._isDragging = false;
+        inst._startEvent = null;
+        inst._pointerId = 0;
+        element.removeEventListener(events.move, inst._onMove);
+        element.removeEventListener(events.cancel, inst._onCancel);
+        element.removeEventListener(events.end, inst._onEnd);
+        inst._emitter.emit('cancel', e);
+      }
+    };
+
+    inst._onEnd = function (e) {
+      if (inst._isDragging) {
+        inst._isDragging = false;
+        inst._startEvent = null;
+        inst._pointerId = 0;
+        element.removeEventListener(events.move, inst._onMove);
+        events.cancel && element.removeEventListener(events.cancel, inst._onCancel);
+        element.removeEventListener(events.end, inst._onEnd);
+        inst._emitter.emit('end', e);
+      }
+    };
+
+    // TODO: Needs prefixing.
+    // NOTE: This could also be done via stylesheets, would be a bit cleaner
+    // and more easier to customize if the need should arise.
+    setStyles(element, {
+      touchAction: 'none',
+      userSelect: 'none',
+      userDrag: 'none',
+      tapHighlightColor: 'rgba(0, 0, 0, 0)'
+    });
+
+    // Bind start event logic.
+    element.addEventListener(events.start, inst._onStart);
+
+  }
+
+  /**
+   * Dragger - Protected properties
+   * ******************************
+   */
+
+  Dragger._hasPointerEvents = global.PointerEvent;
+  Dragger._hasMsPointerEvents = global.navigator.msPointerEnabled;
+  Dragger._hasTouchEvents = 'ontouchstart' in global;
+  Dragger._events = (function () {
+    // Pointer events.
+    if (Dragger._hasPointerEvents) {
+      return {
+        start: 'pointerdown',
+        move: 'pointermove',
+        cancel: 'pointercancel',
+        end: 'pointerup'
+      };
+    }
+    // IE10 Pointer events.
+    if (Dragger._hasMsPointerEvents) {
+      return {
+        start: 'MSPointerDown',
+        move: 'MSPointerMove',
+        cancel: 'MSPointerCancel',
+        end: 'MSPointerUp'
+      };
+    }
+    // Touch events.
+    if (Dragger._hasTouchEvents) {
+      return {
+        start: 'touchstart',
+        move: 'touchmove',
+        cancel: 'touchcancel',
+        end: 'touchend'
+      };
+    }
+    // Mouse events.
+    return {
+      start: 'mousedown',
+      move: 'mousemove',
+      end: 'mouseup'
+    };
+  })();
+
+  /**
+   * Dragger - Protected static methods
+   * **********************************
+   */
+
+  Dragger._getEventPointerId = function (event) {
+
+    // If we have pointer id available let's use it.
+    if (typeof event.pointerid === typeNumber) {
+      return event.pointerid;
+    }
+
+    // For touch events let's get the first changed touch's identifier.
+    if (event.changedTouches) {
+      return (event.changedTouches[0] || {}).identifier || 0;
+    }
+
+    // For mouse events let's provide a static id.
+    return 1;
+
+  };
+
+  Dragger._isPointerInEvent = function (event, pointerId) {
+
+    // If we have pointer id available let's use it.
+    if (typeof event.pointerid === typeNumber) {
+      return event.pointerid === pointerId;
+    }
+
+    // For touch events let's check if the pointer with the provided id is
+    // within changed touches.
+    if (event.changedTouches) {
+      for (var i = 0; i < event.changedTouches.length; i++) {
+        if (event.changedTouches[i].identifier === pointerId) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // For mouse events there's always only one pointer.
+    return true;
+
+  };
+
+  /**
+   * Dragger - Public prototype methods
+   * **********************************
+   */
+
+  /**
+   * Bind drag event listeners.
+   *
+   * @public
+   * @memberof Dragger.prototype
+   * @param {String[]} events
+   *   - 'start', 'move', 'cancel' or 'end'.
+   * @param {Function} listener
+   * @returns {Dragger}
+   */
+  Dragger.prototype.on = function (events, listener) {
+
+    events = events.split(' ');
+    for (var i = 0; i < events.length; i++) {
+      if (Dragger._events[events[i]]) {
+        this._emitter.on(events[i], listener);
+      }
+    }
+
+    return this;
+
+  };
+
+  /**
+   * Unbind drag event listeners.
+   *
+   * @public
+   * @memberof Dragger.prototype
+   * @param {String[]} events
+   *   - 'start', 'move', 'cancel' or 'end'.
+   * @param {Function} listener
+   * @returns {Dragger}
+   */
+  Dragger.prototype.off = function (events, listener) {
+
+    events = events.split(' ');
+    for (i = 0; i < events.length; i++) {
+      if (Dragger._events[events[i]]) {
+        this._emitter.off(events[i], listener);
+      }
+    }
+
+    return this;
+
+  };
+
+  /**
+   * Destroy the instance and unbind all drag event listeners.
+   *
+   * @public
+   * @memberof Dragger.prototype
+   * @returns {Dragger}
+   */
+  Dragger.prototype.destroy = function () {
+
+    var element = this._element;
+    var events = Dragger._events;
+
+    if (element) {
+
+      // Destroy emitter.
+      this._emitter.destroy();
+
+      // Unbind event handlers.
+      element.removeEventListener(events.start, this._onStart);
+      if (this._isDragging) {
+        element.removeEventListener(events.move, this._onMove);
+        events.cancel && element.removeEventListener(events.cancel, this._onCancel);
+        element.removeEventListener(events.end, this._onEnd);
+      }
+
+      // Reset inline styles.
+      setStyles(element, {
+        touchAction: '',
+        userSelect: '',
+        userDrag: '',
+        tapHighlightColor: ''
+      });
+
+      // Reset data.
+      this._element = null;
+      this._isDragging = false;
+      this._onStart = null;
+      this._onMove = null;
+      this._onCancel = null;
+      this._onEnd = null;
+
+    }
+
+    return this;
 
   };
 
