@@ -26,34 +26,6 @@
 }(this, (function (Hammer) {
   'use strict';
 
-  var namespace = 'Muuri';
-  var gridInstances = {};
-
-  var eventSynchronize = 'synchronize';
-  var eventLayoutStart = 'layoutStart';
-  var eventLayoutEnd = 'layoutEnd';
-  var eventAdd = 'add';
-  var eventRemove = 'remove';
-  var eventShowStart = 'showStart';
-  var eventShowEnd = 'showEnd';
-  var eventHideStart = 'hideStart';
-  var eventHideEnd = 'hideEnd';
-  var eventFilter = 'filter';
-  var eventSort = 'sort';
-  var eventMove = 'move';
-  var eventSend = 'send';
-  var eventBeforeSend = 'beforeSend';
-  var eventReceive = 'receive';
-  var eventBeforeReceive = 'beforeReceive';
-  var eventDragInit = 'dragInit';
-  var eventDragStart = 'dragStart';
-  var eventDragMove = 'dragMove';
-  var eventDragScroll = 'dragScroll';
-  var eventDragEnd = 'dragEnd';
-  var eventDragReleaseStart = 'dragReleaseStart';
-  var eventDragReleaseEnd = 'dragReleaseEnd';
-  var eventDestroy = 'destroy';
-
   /**
    * Event emitter constructor.
    *
@@ -231,6 +203,34 @@
 
     return this;
   };
+
+  var namespace = 'Muuri';
+  var gridInstances = {};
+
+  var eventSynchronize = 'synchronize';
+  var eventLayoutStart = 'layoutStart';
+  var eventLayoutEnd = 'layoutEnd';
+  var eventAdd = 'add';
+  var eventRemove = 'remove';
+  var eventShowStart = 'showStart';
+  var eventShowEnd = 'showEnd';
+  var eventHideStart = 'hideStart';
+  var eventHideEnd = 'hideEnd';
+  var eventFilter = 'filter';
+  var eventSort = 'sort';
+  var eventMove = 'move';
+  var eventSend = 'send';
+  var eventBeforeSend = 'beforeSend';
+  var eventReceive = 'receive';
+  var eventBeforeReceive = 'beforeReceive';
+  var eventDragInit = 'dragInit';
+  var eventDragStart = 'dragStart';
+  var eventDragMove = 'dragMove';
+  var eventDragScroll = 'dragScroll';
+  var eventDragEnd = 'dragEnd';
+  var eventDragReleaseStart = 'dragReleaseStart';
+  var eventDragReleaseEnd = 'dragReleaseEnd';
+  var eventDestroy = 'destroy';
 
   // Set up the default export values.
   var isTransformSupported = false;
@@ -1063,6 +1063,8 @@
     this._hammer = hammer = new Hammer.Manager(element);
     this._isDestroyed = false;
     this._isMigrating = false;
+
+    grid.setHammer(hammer);
 
     // Setup item's initial drag data.
     this._reset();
@@ -4378,6 +4380,7 @@
 
     // Destroyed flag.
     this._isDestroyed = false;
+    this._hammer = null;
 
     // The layout object (mutated on every layout).
     this._layout = {
@@ -5324,6 +5327,10 @@
     return this;
   };
 
+  Grid.prototype.setHammer = function(instance) {
+    this._hammer = instance;
+  };
+
   /**
    * Destroy the instance.
    *
@@ -5348,6 +5355,12 @@
     for (i = 0; i < items.length; i++) {
       items[i]._destroy(removeElements);
     }
+
+    if (this._hammer) {
+      this._hammer.destroy();
+    }
+
+    this._hammer = null;
 
     // Restore container.
     removeClass(container, this._settings.containerClass);

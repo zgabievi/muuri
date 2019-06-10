@@ -86,9 +86,11 @@ function ItemDrag(item) {
   // Protected data.
   this._item = item;
   this._gridId = grid._id;
-  window.DUMMY_HAMMER = this._hammer = hammer = new Hammer.Manager(element);
+  this._hammer = hammer = new Hammer.Manager(element);
   this._isDestroyed = false;
   this._isMigrating = false;
+
+  grid.setHammer(hammer);
 
   // Setup item's initial drag data.
   this._reset();

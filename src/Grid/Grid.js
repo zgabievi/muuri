@@ -4,24 +4,6 @@
  * https://github.com/haltu/muuri/blob/master/LICENSE.md
  */
 
-import {
-  eventSynchronize,
-  eventLayoutStart,
-  eventLayoutEnd,
-  eventAdd,
-  eventRemove,
-  eventShowStart,
-  eventShowEnd,
-  eventHideStart,
-  eventHideEnd,
-  eventFilter,
-  eventSort,
-  eventMove,
-  eventDestroy,
-  gridInstances,
-  namespace
-} from '../shared.js';
-
 import Emitter from '../Emitter/Emitter.js';
 import Item from '../Item/Item.js';
 import ItemAnimate from '../Item/ItemAnimate.js';
@@ -31,8 +13,25 @@ import ItemMigrate from '../Item/ItemMigrate.js';
 import ItemRelease from '../Item/ItemRelease.js';
 import ItemVisibility from '../Item/ItemVisibility.js';
 import Packer from '../Packer/Packer.js';
-
+import {
+  eventAdd,
+  eventDestroy,
+  eventFilter,
+  eventHideEnd,
+  eventHideStart,
+  eventLayoutEnd,
+  eventLayoutStart,
+  eventMove,
+  eventRemove,
+  eventShowEnd,
+  eventShowStart,
+  eventSort,
+  eventSynchronize,
+  gridInstances,
+  namespace
+} from '../shared.js';
 import addClass from '../utils/addClass.js';
+import arrayInsert from '../utils/arrayInsert.js';
 import arrayMove from '../utils/arrayMove.js';
 import arraySwap from '../utils/arraySwap.js';
 import createUid from '../utils/createUid.js';
@@ -40,7 +39,6 @@ import debounce from '../utils/debounce.js';
 import elementMatches from '../utils/elementMatches.js';
 import getStyle from '../utils/getStyle.js';
 import getStyleAsFloat from '../utils/getStyleAsFloat.js';
-import arrayInsert from '../utils/arrayInsert.js';
 import isNodeList from '../utils/isNodeList.js';
 import isPlainObject from '../utils/isPlainObject.js';
 import removeClass from '../utils/removeClass.js';
@@ -125,6 +123,7 @@ function Grid(element, options) {
 
   // Destroyed flag.
   this._isDestroyed = false;
+  this._hammer = null;
 
   // The layout object (mutated on every layout).
   this._layout = {
@@ -1071,6 +1070,10 @@ Grid.prototype.send = function(item, grid, position, options) {
   return this;
 };
 
+Grid.prototype.setHammer = function(instance) {
+  this._hammer = instance;
+};
+
 /**
  * Destroy the instance.
  *
@@ -1095,6 +1098,12 @@ Grid.prototype.destroy = function(removeElements) {
   for (i = 0; i < items.length; i++) {
     items[i]._destroy(removeElements);
   }
+
+  if (this._hammer) {
+    this._hammer.destroy();
+  }
+
+  this._hammer = null;
 
   // Restore container.
   removeClass(container, this._settings.containerClass);
